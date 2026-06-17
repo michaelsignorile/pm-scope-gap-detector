@@ -988,24 +988,62 @@ export default function App() {
   const [projectName, setProjectName] = useState("");
   const [gaps, setGaps] = useState([]);
 
-  const handleAnalyzeWithFiles = async (drawings, specs, pt, code, disc, pname, setProgress, setPhase) => {
-    try {
-      setPhase("Reading uploaded files...");
-      setProgress(20);
+ const handleAnalyzeWithFiles = async (drawings, specs, pt, code, disc, pname, setProgress, setPhase) => {
+  try {
+    setPhase("Reading uploaded files...");
+    setProgress(20);
 
-      const readFile = (file) => new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result || "");
-        reader.onerror = () => resolve("");
-        reader.readAsText(file);
-      });
+    const toBase64 = (file) => new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result.split(",")[1]);
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(file);
+    });
 
-      const drawingsText = drawings ? await readFile(drawings) : "";
-      const specsText = specs ? await readFile(specs) : "";
+    const drawingsBase64 = drawings ? await toBase64(drawings) : "";
+    const specsBase64 = specs ? await toBase64(specs) : "";
 
-      if (!drawingsText && !specsText) {
-        throw new Error("No readable text content found in uploaded files");
-      }
+    setPhase("Sending to Claude AI for analysis...");
+    setProgress(50);
+
+    const response = await fetch("/api/analyze-gaps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        drawingsBase64,
+        specsBase64,
+        drawingsName: drawings?.name || "",
+        specsName: specs?.name || "",
+        projectType: pt.label,
+        codeVintage: code.label,
+        disciplines: disc,
+      }),
+    });
+
+    setPhase("Processing Claude's analysis...");
+    setProgress(75);
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || "Analysis failed");
+    }
+
+    const data = await response.json();
+
+    setPhase("Building your report...");
+    setProgress(95);
+    await new Promise(r => setTimeout(r, 400));
+    setProgress(100);
+    await new Promise(r => setTimeout(r, 200));
+
+    setGaps(data.gaps);
+    setStep(4);
+
+  } catch (err) {
+    console.error("Analysis error:", err);
+    alert(`Analysis failed: ${err.message}`);
+  }
+};
 
       setPhase("Sending to Claude AI for analysis...");
       setProgress(50);
